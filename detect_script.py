@@ -45,7 +45,7 @@ def detect_basketball_objects(video_path, output_path='output_detection.mp4'):
         frame_count += 1
         
         # Run YOLO detection
-        results = model(frame, verbose=False)
+        results = model(frame, verbose=False, conf = 0.15, imgsz= 1280, iou=0.7)
         
         # Get detections
         for result in results:
