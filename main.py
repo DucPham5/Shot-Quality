@@ -30,6 +30,7 @@ if __name__ == "__main__":
     player_model = YOLO("models/player_detector.pt")
     ball_model = YOLO("models/balldetectionv2.pt")
     print(ball_model.names)
+    print(player_model.names)
 
     # Ball model class IDs
     name_to_id = {v: k for k, v in ball_model.names.items()}
@@ -38,7 +39,7 @@ if __name__ == "__main__":
 
     # Filter hoop out of player model — ball model handles hoops
     player_name_to_id = {v: k for k, v in player_model.names.items()}
-    PLAYER_HOOP_CLASS_ID = player_name_to_id.get('hoop', None)
+    PLAYER_HOOP_CLASS_ID = player_name_to_id.get('Hoop', None)
 
     # Open video first so we have fps for the tracker
     cap = cv2.VideoCapture("video_1.mp4")
