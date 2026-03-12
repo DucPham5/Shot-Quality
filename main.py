@@ -4,7 +4,7 @@ import time
 import cv2
 import numpy as np
 
-from utils.ballTracker import BallTracker
+from trackers.ballTracker import BallTracker
 
 
 if __name__ == "__main__":
