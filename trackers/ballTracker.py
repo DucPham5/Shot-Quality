@@ -126,24 +126,6 @@ class BallTracker:
             else:
                 last_good_idx = i
 
-        # Remove trailing false positive — last detection far from second to last
-        last = None
-        second_last = None
-        for i in range(len(ball_positions) - 1, -1, -1):
-            if ball_positions[i].get('bbox') is not None:
-                if last is None:
-                    last = i
-                elif second_last is None:
-                    second_last = i
-                    break
-        if last is not None and second_last is not None:
-            dist = np.linalg.norm(
-                np.array(ball_positions[last]['bbox'][:2]) -
-                np.array(ball_positions[second_last]['bbox'][:2])
-            )
-            if dist > max_distance_per_frame * 10:
-                ball_positions[last] = {}
-
         return ball_positions
 
     def interpolate_positions(self, ball_positions):
