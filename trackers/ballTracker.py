@@ -6,6 +6,8 @@ import torch
 import torchvision
 
 
+
+
 def apply_nms(detections, iou_threshold=0.5):
     """Collapse duplicate detections of the same ball into one box."""
     if len(detections) == 0:
@@ -99,32 +101,55 @@ class BallTracker:
     def remove_wrong_detections(self, ball_positions, max_distance_per_frame=15):
         """
         Filter detections where the ball jumps too far between frames.
-        Scales allowed distance by frame gap to handle brief occlusions.
-        Also removes trailing false positives at the end of the video.
+        Checks both previous and next detection to catch false positives
+        that fool a single direction check.
         """
-        last_good_idx = -1
+        # Collect all valid detection indices first
+        valid_indices = [i for i, p in enumerate(ball_positions) if p.get('bbox') is not None]
 
-        for i in range(len(ball_positions)):
+        for idx, i in enumerate(valid_indices):
             current = ball_positions[i].get('bbox')
             if current is None:
                 continue
 
-            if last_good_idx == -1:
-                last_good_idx = i
-                continue
+            # Check against previous detection
+            if idx > 0:
+            # Find the nearest non-rejected previous detection
+                prev_bbox = None
+                prev_i = None
+                for look_back in range(idx - 1, -1, -1):
+                    candidate = ball_positions[valid_indices[look_back]].get('bbox')
+                    if candidate is not None:
+                        prev_bbox = candidate
+                        prev_i = valid_indices[look_back]
+                        break
+                
+                if prev_bbox is not None:
+                    frame_gap = i - prev_i
+                    allowed = max_distance_per_frame * frame_gap
+                    dist = np.linalg.norm(np.array(current[:2]) - np.array(prev_bbox[:2]))
+                    if dist > allowed:
+                        ball_positions[i] = {}
+                        continue
 
-            last_bbox = ball_positions[last_good_idx].get('bbox')
-            frame_gap = i - last_good_idx
-            allowed = max_distance_per_frame * frame_gap
-
-            dist = np.linalg.norm(
-                np.array(current[:2]) - np.array(last_bbox[:2])
-            )
-
-            if dist > allowed:
-                ball_positions[i] = {}
-            else:
-                last_good_idx = i
+            # Check against next detection
+            if idx < len(valid_indices) - 1:
+                next_bbox = None
+                next_i = None
+                for look_ahead in range(idx + 1, len(valid_indices)):
+                    candidate = ball_positions[valid_indices[look_ahead]].get('bbox')
+                    if candidate is not None:
+                        next_bbox = candidate
+                        next_i = valid_indices[look_ahead]
+                        break
+                
+                if next_bbox is not None:
+                    frame_gap = next_i - i
+                    allowed = max_distance_per_frame * frame_gap
+                    dist = np.linalg.norm(np.array(current[:2]) - np.array(next_bbox[:2]))
+                    if dist > allowed:
+                        ball_positions[i] = {}
+                        continue
 
         return ball_positions
 
