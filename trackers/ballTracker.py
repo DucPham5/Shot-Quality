@@ -96,10 +96,11 @@ class BallTracker:
             hoop_positions.append({'boxes': hoop_only.xyxy.tolist()})
         return hoop_positions
 
-    def remove_wrong_detections(self, ball_positions, max_distance_per_frame=25):
+    def remove_wrong_detections(self, ball_positions, max_distance_per_frame=15):
         """
         Filter detections where the ball jumps too far between frames.
         Scales allowed distance by frame gap to handle brief occlusions.
+        Also removes trailing false positives at the end of the video.
         """
         last_good_idx = -1
 
@@ -121,9 +122,27 @@ class BallTracker:
             )
 
             if dist > allowed:
-                ball_positions[i] = {}  # reject — too far
+                ball_positions[i] = {}
             else:
                 last_good_idx = i
+
+        # Remove trailing false positive — last detection far from second to last
+        last = None
+        second_last = None
+        for i in range(len(ball_positions) - 1, -1, -1):
+            if ball_positions[i].get('bbox') is not None:
+                if last is None:
+                    last = i
+                elif second_last is None:
+                    second_last = i
+                    break
+        if last is not None and second_last is not None:
+            dist = np.linalg.norm(
+                np.array(ball_positions[last]['bbox'][:2]) -
+                np.array(ball_positions[second_last]['bbox'][:2])
+            )
+            if dist > max_distance_per_frame * 10:
+                ball_positions[last] = {}
 
         return ball_positions
 
