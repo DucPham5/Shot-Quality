@@ -3,24 +3,44 @@ import supervision as sv
 import time
 import cv2
 import numpy as np
+import os
 
 from trackers.ballTracker import BallTracker
+from trackers.playerTracker import PlayerTracker
 
+
+def select_video(video_dir="input_videos"):
+    videos = sorted([f for f in os.listdir(video_dir) if f.endswith(".mp4")])
+    
+    if not videos:
+        print("No mp4 files found in input_videos/")
+        exit()
+
+    print("\nAvailable videos:")
+    for i, v in enumerate(videos):
+        print(f"  {i + 1}. {v}")
+
+    choice = int(input("\nSelect video number: ")) - 1
+    return os.path.join(video_dir, videos[choice])
 
 if __name__ == "__main__":
 
     start_time = time.time()
 
     # ── Load models ───────────────────────────────────────────
-    player_model = YOLO("models/player_detector.pt")
+    player_tracker = PlayerTracker(
+        model_path = "models/player_detector.pt",
+        conf = 0.2
+    )
     ball_tracker = BallTracker(
         model_path="models/balldetectorv3.pt",
-        conf=0.6,
+        conf=0.5,
         batch_size=20
     )
 
     # ── Open video ────────────────────────────────────────────
-    cap = cv2.VideoCapture("input_videos/video_2.mp4")
+    video_path = select_video()
+    cap = cv2.VideoCapture(video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -39,6 +59,9 @@ if __name__ == "__main__":
 
     # ── Offline ball detection + interpolation ────────────────
     ball_positions = ball_tracker.get_ball_positions(frames)
+    # Player detection + tracking frame by frame
+    #returns us an array of raw YOLO data of all the detections per frame
+    player_positions = player_tracker.get_player_tracks(frames)
 
     # ── Setup output video ────────────────────────────────────
     out = cv2.VideoWriter(
@@ -51,32 +74,15 @@ if __name__ == "__main__":
     # ── Render frames with player tracking + ball positions ───
     print("Rendering output video...")
     for frame_num, frame in enumerate(frames):
+        # ── Draw players from player_tracks──────────────────────────────────────
+        for box, track_id, cls in player_positions[frame_num]:
+            x1, y1, x2, y2 = map(int, box.cpu().numpy())
+            tid_p = int(track_id)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"#{tid_p}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        # Player detection + tracking (still frame by frame)
-        player_results = player_model.track(
-            frame, conf=0.3, tracker="botsort.yaml",
-            persist=True, verbose=False, agnostic_nms=True
-        )
-
-        # ── Draw players ──────────────────────────────────────
-        player_name_to_id = {v: k for k, v in player_model.names.items()}
-        PLAYER_HOOP_CLASS_ID = player_name_to_id.get('Hoop')
-
-        if player_results[0].boxes.id is not None:
-            for box, track_id, cls in zip(
-                player_results[0].boxes.xyxy,
-                player_results[0].boxes.id,
-                player_results[0].boxes.cls
-            ):
-                if PLAYER_HOOP_CLASS_ID is not None and int(cls) == PLAYER_HOOP_CLASS_ID:
-                    continue
-                x1, y1, x2, y2 = map(int, box.cpu().numpy())
-                tid_p = int(track_id)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(frame, f"#{tid_p}", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-        # ── Draw ball ─────────────────────────────────────────
+        # ── Draw ball from ball_─────────────────────────────────────────
         ball_pos = ball_positions[frame_num]
         if ball_pos:
             center = ball_pos['center']

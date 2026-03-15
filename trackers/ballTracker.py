@@ -68,10 +68,15 @@ class BallTracker:
             ball_positions.append({'center': center, 'bbox': box.tolist()})
 
         print("Filtering false positives...")
-        ball_positions = self._remove_wrong_detections(ball_positions)
+        ball_positions = self.remove_wrong_detections(ball_positions)
+
+        """TESTING DEBUGGING"""
+        for i, pos in enumerate(ball_positions):
+            if pos:
+                print(f"Frame {i}: {pos['center']}")
 
         print("Interpolating gaps...")
-        ball_positions = self._interpolate_positions(ball_positions)
+        ball_positions = self.interpolate_positions(ball_positions)
 
         return ball_positions
 
@@ -91,7 +96,7 @@ class BallTracker:
             hoop_positions.append({'boxes': hoop_only.xyxy.tolist()})
         return hoop_positions
 
-    def _remove_wrong_detections(self, ball_positions, max_distance_per_frame=25):
+    def remove_wrong_detections(self, ball_positions, max_distance_per_frame=25):
         """
         Filter detections where the ball jumps too far between frames.
         Scales allowed distance by frame gap to handle brief occlusions.
@@ -122,7 +127,7 @@ class BallTracker:
 
         return ball_positions
 
-    def _interpolate_positions(self, ball_positions):
+    def interpolate_positions(self, ball_positions):
         """
         Fill gaps in ball positions by interpolating between known detections.
         This is the key advantage over frame-by-frame prediction — we know
