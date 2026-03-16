@@ -28,6 +28,7 @@ class BallTracker:
         self.model = YOLO(model_path)
         self.conf = conf
         self.batch_size = batch_size
+        self.device = 'mps' if torch.backends.mps.is_available() else 'cpu'
 
         # Get class IDs from model
         name_to_id = {v: k for k, v in self.model.names.items()}
@@ -39,7 +40,7 @@ class BallTracker:
         all_detections = []
         for i in range(0, len(frames), self.batch_size):
             batch = frames[i:i + self.batch_size]
-            results = self.model.predict(batch, conf=self.conf, verbose=False, agnostic_nms=True)
+            results = self.model.predict(batch, conf=self.conf, verbose=False, agnostic_nms=True, device=self.device)
             all_detections += results
             if i % 100 == 0:
                 print(f"  Ball detection: {i}/{len(frames)} frames")
@@ -101,10 +102,8 @@ class BallTracker:
     def remove_wrong_detections(self, ball_positions, max_distance_per_frame=15):
         """
         Filter detections where the ball jumps too far between frames.
-        Checks both previous and next detection to catch false positives
-        that fool a single direction check.
+        Rejects a detection only if it fails both the backward AND forward check.
         """
-        # Collect all valid detection indices first
         valid_indices = [i for i, p in enumerate(ball_positions) if p.get('bbox') is not None]
 
         for idx, i in enumerate(valid_indices):
@@ -112,9 +111,11 @@ class BallTracker:
             if current is None:
                 continue
 
-            # Check against previous detection
+            failed_prev = False
+            failed_next = False
+
+            # Check against nearest surviving previous detection
             if idx > 0:
-            # Find the nearest non-rejected previous detection
                 prev_bbox = None
                 prev_i = None
                 for look_back in range(idx - 1, -1, -1):
@@ -123,16 +124,15 @@ class BallTracker:
                         prev_bbox = candidate
                         prev_i = valid_indices[look_back]
                         break
-                
+
                 if prev_bbox is not None:
                     frame_gap = i - prev_i
                     allowed = max_distance_per_frame * frame_gap
                     dist = np.linalg.norm(np.array(current[:2]) - np.array(prev_bbox[:2]))
                     if dist > allowed:
-                        ball_positions[i] = {}
-                        continue
+                        failed_prev = True
 
-            # Check against next detection
+            # Check against nearest surviving next detection
             if idx < len(valid_indices) - 1:
                 next_bbox = None
                 next_i = None
@@ -142,14 +142,17 @@ class BallTracker:
                         next_bbox = candidate
                         next_i = valid_indices[look_ahead]
                         break
-                
+
                 if next_bbox is not None:
                     frame_gap = next_i - i
                     allowed = max_distance_per_frame * frame_gap
                     dist = np.linalg.norm(np.array(current[:2]) - np.array(next_bbox[:2]))
                     if dist > allowed:
-                        ball_positions[i] = {}
-                        continue
+                        failed_next = True
+
+            # Only reject if fails both directions
+            if failed_prev and failed_next:
+                ball_positions[i] = {}
 
         return ball_positions
 
